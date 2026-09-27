@@ -1,0 +1,25 @@
+-- Schema for the COLORS LAMP application.
+-- Run once against a fresh MySQL server, e.g.:  mysql -u root -p < database/schema.sql
+
+CREATE DATABASE IF NOT EXISTS COP4331;
+USE COP4331;
+
+CREATE TABLE IF NOT EXISTS Users
+(
+	ID               INT NOT NULL AUTO_INCREMENT,
+	DateCreated      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	DateLastLoggedIn DATETIME NULL DEFAULT NULL,
+	FirstName        VARCHAR(50) NOT NULL DEFAULT '',
+	LastName         VARCHAR(50) NOT NULL DEFAULT '',
+	Login            VARCHAR(50) NOT NULL DEFAULT '',
+	Password         VARCHAR(50) NOT NULL DEFAULT '',
+	PRIMARY KEY (ID)
+) ENGINE = InnoDB;
+
+CREATE TABLE IF NOT EXISTS Colors
+(
+	ID     INT NOT NULL AUTO_INCREMENT,
+	Name   VARCHAR(50) NOT NULL DEFAULT '',
+	UserID INT NOT NULL DEFAULT 0,
+	PRIMARY KEY (ID)
+) ENGINE = InnoDB;
