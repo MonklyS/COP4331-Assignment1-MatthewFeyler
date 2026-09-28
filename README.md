@@ -8,6 +8,8 @@ The browser never talks to the database directly. The pages send JSON to small P
 Browser (HTML/CSS/JS)  --JSON over HTTP-->  Apache + PHP (api/)  --SQL-->  MySQL
 ```
 
+**Live site:** http://cop4331mfey.org
+
 ## Technologies
 
 | Layer      | Technology |
@@ -95,7 +97,7 @@ These steps assume a fresh Ubuntu server (for example a DigitalOcean droplet) wh
 
 Apache serves the app as soon as the files are in place (run `sudo systemctl restart apache2` if Apache was already running before PHP was installed).
 
-1. Open `http://<your-server-ip-or-domain>/` in a browser.
+1. Open `http://<your-server-ip-or-domain>/` in a browser. The deployed copy is at http://cop4331mfey.org.
 2. Log in with the user from setup step 4 (`testuser` / `testpass`). A wrong username or password shows "User/Password combination incorrect".
 3. On the color page, type a color and click **Add Color**.
 4. Type part of a name and click **Search Color** to list your matching colors.
