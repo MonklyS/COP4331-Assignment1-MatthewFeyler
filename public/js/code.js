@@ -160,8 +160,17 @@ function searchColor()
 		{
 			if (this.readyState == 4 && this.status == 200) 
 			{
-				document.getElementById("colorSearchResult").innerHTML = "Color(s) has been retrieved";
 				let jsonObject = JSON.parse( xhr.responseText );
+				
+				// No matches: the API returns an error and no results array
+				if( jsonObject.error )
+				{
+					document.getElementById("colorSearchResult").innerHTML = jsonObject.error;
+					document.getElementsByTagName("p")[0].innerHTML = "";
+					return;
+				}
+				
+				document.getElementById("colorSearchResult").innerHTML = "Color(s) has been retrieved";
 				
 				for( let i=0; i<jsonObject.results.length; i++ )
 				{
