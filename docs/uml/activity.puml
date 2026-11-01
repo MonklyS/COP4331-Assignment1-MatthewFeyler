@@ -1,0 +1,100 @@
+@startuml activity
+' Activity Diagram - COLORS Web Application (COP 4331 LAMP Stack, Labs 1-3)
+title COLORS Web Application - Activity Diagram
+skinparam activity {
+  BackgroundColor #F5F9FF
+  BorderColor #3A6EA5
+}
+
+|User|
+start
+:Open index.html;
+repeat
+  :Enter username and password;
+  :Click "Do It";
+  |Browser (code.js)|
+  :doLogin(): build JSON
+  {login, password};
+  :POST /LAMPAPI/Login.php;
+  |Server (PHP)|
+  :Decode JSON request;
+  |MySQL Database|
+  :SELECT ID, firstName, lastName
+  FROM Users
+  WHERE Login=? AND Password=?;
+  |Server (PHP)|
+  if (Row found?) then (yes)
+    :returnWithInfo()
+    {id, firstName, lastName, error:""};
+  else (no)
+    :returnWithError()
+    {id:0, error:"No Records Found"};
+  endif
+  |Browser (code.js)|
+  :Parse JSON response;
+  backward :Show "User/Password
+  combination incorrect";
+repeat while (id < 1?) is (yes) not (no)
+
+:saveCookie()
+(firstName, lastName, userId; expires in 20 min);
+:Redirect to color.html;
+:readCookie() on DOMContentLoaded;
+if (userId cookie valid?) then (no)
+  :Redirect to index.html;
+  stop
+else (yes)
+endif
+
+repeat
+  |User|
+  :Choose an action;
+  if (Search?) then (yes)
+    :Type search text;
+    :Click "Search Color";
+    |Browser (code.js)|
+    :searchColor(): POST
+    {search, userId} to SearchColors.php;
+    |MySQL Database|
+    :SELECT Name FROM Colors
+    WHERE Name LIKE '%search%'
+    AND UserID=?;
+    |Server (PHP)|
+    if (Any matches?) then (yes)
+      :returnWithInfo() {results:[...]};
+    else (no)
+      :returnWithError()
+      {error:"No Records Found"};
+    endif
+    |Browser (code.js)|
+    :Show "Color(s) has been retrieved";
+    :Render results in #colorList
+    (only when results are returned);
+  elseif (Add?) then (yes)
+    |User|
+    :Type color name;
+    :Click "Add Color";
+    |Browser (code.js)|
+    :addColor(): POST
+    {color, userId} to AddColor.php;
+    |MySQL Database|
+    :INSERT INTO Colors (UserId, Name)
+    VALUES (?, ?);
+    |Server (PHP)|
+    :returnWithError(empty string)
+    {error:""};
+    |Browser (code.js)|
+    :Show "Color has been added";
+  else (Log Out)
+    |User|
+    :Click "Log Out";
+    |Browser (code.js)|
+    :doLogout(): clear variables,
+    expire cookie;
+    :Redirect to index.html;
+    stop
+  endif
+  |User|
+repeat while (Continue?) is (yes)
+stop
+@enduml

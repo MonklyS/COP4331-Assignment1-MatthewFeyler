@@ -1,0 +1,168 @@
+@startuml class
+' Class Diagram - COLORS Web Application (COP 4331 LAMP Stack, Labs 1-3)
+' The app is procedural (JS + PHP scripts), so pages, scripts and endpoints are
+' modeled as stereotyped classes; DTOs show the JSON exchanged over HTTP.
+title COLORS Web Application - Class Diagram
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor #F5F9FF
+  BorderColor #3A6EA5
+}
+hide empty members
+
+package "Client (public/)" {
+  class "index.html" as IndexPage <<HTML Page>> {
+    - loginName : text input
+    - loginPassword : password input
+    - loginButton : button
+    - loginResult : span
+  }
+
+  class "color.html" as ColorPage <<HTML Page>> {
+    - userName : span
+    - logoutButton : button
+    - searchText : text input
+    - searchColorButton : button
+    - colorSearchResult : span
+    - colorList : p
+    - colorText : text input
+    - addColorButton : button
+    - colorAddResult : span
+  }
+
+  class "code.js" as CodeJS <<JavaScript Module>> {
+    + {static} urlBase : string = "LAMPAPI"
+    + {static} extension : string = "php"
+    - userId : int
+    - firstName : string
+    - lastName : string
+    --
+    + doLogin() : void
+    + doLogout() : void
+    + addColor() : void
+    + searchColor() : void
+    - saveCookie() : void
+    - readCookie() : void
+  }
+
+  class "md5.js" as MD5 <<JavaScript Library>> {
+    + md5(text : string) : string
+  }
+
+  class SessionCookie <<Cookie>> {
+    firstName : string
+    lastName : string
+    userId : int
+    expires : Date = now + 20 min
+  }
+}
+
+package "Server (api/ - PHP)" {
+  class "db.php" as DbHelpers <<PHP Helpers>> {
+    + getDbConnection() : mysqli
+    + getRequestInfo() : array
+    + sendResultInfoAsJson(obj : string) : void
+  }
+
+  class "config.php" as Config <<PHP Config>> {
+    + DB_HOST : string
+    + DB_USER : string
+    + DB_PASS : string
+    + DB_NAME : string = "COP4331"
+  }
+
+  class "Login.php" as LoginAPI <<Endpoint>> {
+    - returnWithError(err : string) : void
+    - returnWithInfo(firstName, lastName, id) : void
+  }
+  class "AddColor.php" as AddColorAPI <<Endpoint>> {
+    - returnWithError(err : string) : void
+  }
+  class "SearchColors.php" as SearchAPI <<Endpoint>> {
+    - searchCount : int
+    - returnWithError(err : string) : void
+    - returnWithInfo(searchResults : string) : void
+  }
+}
+
+package "JSON Messages (DTOs)" {
+  class LoginRequest {
+    login : string
+    password : string
+  }
+  class LoginResponse {
+    id : int
+    firstName : string
+    lastName : string
+    error : string
+  }
+  class AddColorRequest {
+    color : string
+    userId : int
+  }
+  class SearchRequest {
+    search : string
+    userId : int
+  }
+  class SearchResponse {
+    results : string[]
+    error : string
+  }
+  class ErrorResponse {
+    error : string
+  }
+}
+
+package "Database (MySQL: COP4331)" {
+  entity Users <<table>> {
+    * ID : INT <<PK>> AUTO_INCREMENT
+    --
+    DateCreated : DATETIME
+    DateLastLoggedIn : DATETIME
+    FirstName : VARCHAR(50)
+    LastName : VARCHAR(50)
+    Login : VARCHAR(50)
+    Password : VARCHAR(50)
+  }
+  entity Colors <<table>> {
+    * ID : INT <<PK>> AUTO_INCREMENT
+    --
+    Name : VARCHAR(50)
+    UserID : INT
+  }
+}
+
+' --- Client relationships
+IndexPage ..> CodeJS : loads
+IndexPage ..> MD5 : loads
+ColorPage ..> CodeJS : loads
+CodeJS --> SessionCookie : saves / reads
+CodeJS ..> MD5 : <<optional>>\n(hashing commented out)
+
+' --- HTTP calls (XMLHttpRequest POST)
+CodeJS ..> LoginAPI : POST
+CodeJS ..> AddColorAPI : POST
+CodeJS ..> SearchAPI : POST
+
+' --- Endpoints share the helpers in db.php
+LoginAPI ..> DbHelpers : require_once
+AddColorAPI ..> DbHelpers : require_once
+SearchAPI ..> DbHelpers : require_once
+DbHelpers ..> Config : require_once
+
+' --- Messages exchanged
+LoginAPI ..> LoginRequest : receives
+LoginAPI ..> LoginResponse : returns
+AddColorAPI ..> AddColorRequest : receives
+AddColorAPI ..> ErrorResponse : returns
+SearchAPI ..> SearchRequest : receives
+SearchAPI ..> SearchResponse : returns
+SearchAPI ..> ErrorResponse : returns\n(no matches)
+
+' --- Data access (mysqli prepared statements)
+LoginAPI ..> Users : SELECT
+AddColorAPI ..> Colors : INSERT
+SearchAPI ..> Colors : SELECT ... LIKE
+
+Users "1" -- "0..*" Colors : owns >\n(Colors.UserID = Users.ID)
+@enduml
