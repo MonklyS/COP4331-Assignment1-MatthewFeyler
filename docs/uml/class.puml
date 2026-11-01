@@ -1,9 +1,13 @@
 @startuml class
 ' Class Diagram - COLORS Web Application (COP 4331 LAMP Stack, Labs 1-3)
 ' The app is procedural (JS + PHP scripts), so pages, scripts and endpoints are
-' modeled as stereotyped classes; DTOs show the JSON exchanged over HTTP.
+' modeled as stereotyped classes; <<JSON>> classes show the messages exchanged
+' over HTTP. Layout is top-down: Client -> Server -> Database.
 title COLORS Web Application - Class Diagram
 skinparam classAttributeIconSize 0
+skinparam linetype ortho
+skinparam nodesep 45
+skinparam ranksep 70
 skinparam class {
   BackgroundColor #F5F9FF
   BorderColor #3A6EA5
@@ -30,6 +34,10 @@ package "Client (public/)" {
     - colorAddResult : span
   }
 
+  class "md5.js" as MD5 <<JavaScript Library>> {
+    + md5(text : string) : string
+  }
+
   class "code.js" as CodeJS <<JavaScript Module>> {
     + {static} urlBase : string = "LAMPAPI"
     + {static} extension : string = "php"
@@ -45,10 +53,6 @@ package "Client (public/)" {
     - readCookie() : void
   }
 
-  class "md5.js" as MD5 <<JavaScript Library>> {
-    + md5(text : string) : string
-  }
-
   class SessionCookie <<Cookie>> {
     firstName : string
     lastName : string
@@ -58,17 +62,17 @@ package "Client (public/)" {
 }
 
 package "Server (api/ - PHP)" {
-  class "db.php" as DbHelpers <<PHP Helpers>> {
-    + getDbConnection() : mysqli
-    + getRequestInfo() : array
-    + sendResultInfoAsJson(obj : string) : void
-  }
-
   class "config.php" as Config <<PHP Config>> {
     + DB_HOST : string
     + DB_USER : string
     + DB_PASS : string
     + DB_NAME : string = "COP4331"
+  }
+
+  class "db.php" as DbHelpers <<PHP Helpers (required by every endpoint)>> {
+    + getDbConnection() : mysqli
+    + getRequestInfo() : array
+    + sendResultInfoAsJson(obj : string) : void
   }
 
   class "Login.php" as LoginAPI <<Endpoint>> {
@@ -83,32 +87,30 @@ package "Server (api/ - PHP)" {
     - returnWithError(err : string) : void
     - returnWithInfo(searchResults : string) : void
   }
-}
 
-package "JSON Messages (DTOs)" {
-  class LoginRequest {
+  class LoginRequest <<JSON>> {
     login : string
     password : string
   }
-  class LoginResponse {
+  class LoginResponse <<JSON>> {
     id : int
     firstName : string
     lastName : string
     error : string
   }
-  class AddColorRequest {
+  class AddColorRequest <<JSON>> {
     color : string
     userId : int
   }
-  class SearchRequest {
+  class ErrorResponse <<JSON>> {
+    error : string
+  }
+  class SearchRequest <<JSON>> {
     search : string
     userId : int
   }
-  class SearchResponse {
+  class SearchResponse <<JSON>> {
     results : string[]
-    error : string
-  }
-  class ErrorResponse {
     error : string
   }
 }
@@ -132,37 +134,50 @@ package "Database (MySQL: COP4331)" {
   }
 }
 
-' --- Client relationships
-IndexPage ..> CodeJS : loads
-IndexPage ..> MD5 : loads
-ColorPage ..> CodeJS : loads
-CodeJS --> SessionCookie : saves / reads
-CodeJS ..> MD5 : <<optional>>\n(hashing commented out)
+' --- Client: pages load scripts; code.js keeps the session in a cookie
+IndexPage .down.> CodeJS : loads
+ColorPage .down.> CodeJS : loads
+IndexPage .down.> MD5 : loads
+CodeJS .left.> MD5 : <<optional>>
+CodeJS -right-> SessionCookie : saves / reads
 
 ' --- HTTP calls (XMLHttpRequest POST)
-CodeJS ..> LoginAPI : POST
-CodeJS ..> AddColorAPI : POST
-CodeJS ..> SearchAPI : POST
+CodeJS .down.> LoginAPI : POST
+CodeJS .down.> AddColorAPI : POST
+CodeJS .down.> SearchAPI : POST
 
-' --- Endpoints share the helpers in db.php
-LoginAPI ..> DbHelpers : require_once
-AddColorAPI ..> DbHelpers : require_once
-SearchAPI ..> DbHelpers : require_once
-DbHelpers ..> Config : require_once
+' --- Layout only: fix left-to-right order of the endpoint row and the row
+' below it, and keep the Database package underneath the Server package
+LoginAPI -[hidden]right- AddColorAPI
+AddColorAPI -[hidden]right- SearchAPI
+LoginRequest -[hidden]right- LoginResponse
+LoginResponse -[hidden]right- AddColorRequest
+AddColorRequest -[hidden]right- DbHelpers
+Config -[hidden]right- ErrorResponse
+ErrorResponse -[hidden]right- SearchRequest
+SearchRequest -[hidden]right- SearchResponse
+LoginRequest -[hidden]down- Users
+SearchResponse -[hidden]down- Colors
 
-' --- Messages exchanged
-LoginAPI ..> LoginRequest : receives
-LoginAPI ..> LoginResponse : returns
-AddColorAPI ..> AddColorRequest : receives
-AddColorAPI ..> ErrorResponse : returns
-SearchAPI ..> SearchRequest : receives
-SearchAPI ..> SearchResponse : returns
-SearchAPI ..> ErrorResponse : returns\n(no matches)
+' --- Every endpoint does require_once "db.php", which requires config.php
+LoginAPI ..> DbHelpers
+AddColorAPI ..> DbHelpers
+SearchAPI ..> DbHelpers
+DbHelpers .right.> Config
+
+' --- JSON messages each endpoint receives / returns
+LoginAPI .down.> LoginRequest
+LoginAPI .down.> LoginResponse
+AddColorAPI .down.> AddColorRequest
+AddColorAPI .down.> ErrorResponse
+SearchAPI .down.> ErrorResponse
+SearchAPI .down.> SearchRequest
+SearchAPI .down.> SearchResponse
 
 ' --- Data access (mysqli prepared statements)
-LoginAPI ..> Users : SELECT
-AddColorAPI ..> Colors : INSERT
-SearchAPI ..> Colors : SELECT ... LIKE
+LoginAPI .down.> Users : SELECT
+AddColorAPI .down.> Colors : INSERT
+SearchAPI .down.> Colors : SELECT ... LIKE
 
-Users "1" -- "0..*" Colors : owns >\n(Colors.UserID = Users.ID)
+Users "1" -right- "0..*" Colors : owns >
 @enduml

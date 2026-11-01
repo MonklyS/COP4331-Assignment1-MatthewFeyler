@@ -67,9 +67,14 @@ repeat
       {error:"No Records Found"};
     endif
     |Browser (code.js)|
-    :Show "Color(s) has been retrieved";
-    :Render results in #colorList
-    (only when results are returned);
+    :Parse JSON response;
+    if (error set?) then (yes)
+      :Show error message;
+      :Clear #colorList;
+    else (no)
+      :Show "Color(s) has been retrieved";
+      :Render results in #colorList;
+    endif
   elseif (Add?) then (yes)
     |User|
     :Type color name;
