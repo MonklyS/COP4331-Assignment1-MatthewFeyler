@@ -23,3 +23,6 @@ desktop.ini
 # Logs and temp files
 *.log
 tmp/
+
+# Lint tool dependencies (restored by npm ci)
+node_modules/
