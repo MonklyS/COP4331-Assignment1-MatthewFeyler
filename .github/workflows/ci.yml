@@ -1,0 +1,133 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint ${{ matrix.language }}
+    runs-on: ubuntu-latest
+    strategy:
+      # Let every linter finish so one run reports all problems at once.
+      fail-fast: false
+      matrix:
+        language: [html, css, js]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install lint tools
+        run: npm ci
+
+      - name: Run ${{ matrix.language }} linter
+        run: npm run lint:${{ matrix.language }}
+
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install test tools
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+  integration-tests:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    # The API runs on PHP and MySQL, as it does on the LAMP server. Node.js only runs
+    # Jest, which sends HTTP requests to the API like the browser does.
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: COP4331
+          # The API connects as its own user, as in the README setup. These
+          # credentials only exist in this throwaway CI database.
+          MYSQL_USER: colors_app
+          MYSQL_PASSWORD: ci-only-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      API_BASE_URL: http://127.0.0.1:8000
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: mysqli
+          coverage: none
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install test tools
+        run: npm ci
+
+      - name: Create the tables and test users
+        run: |
+          docker exec -i ${{ job.services.mysql.id }} mysql -uroot -proot < database/schema.sql
+          docker exec -i ${{ job.services.mysql.id }} mysql -uroot -proot < tests/fixtures/seed.sql
+
+      - name: Write the API's database config
+        run: |
+          cat > api/config.php <<'EOF'
+          <?php
+            define("DB_HOST", "127.0.0.1");
+            define("DB_USER", "colors_app");
+            define("DB_PASS", "ci-only-password");
+            define("DB_NAME", "COP4331");
+          ?>
+          EOF
+
+      - name: Start the API on PHP's built-in web server
+        run: |
+          php -S 127.0.0.1:8000 -t api > php-server.log 2>&1 &
+          # Wait until the server accepts connections before the tests start.
+          for attempt in $(seq 1 20); do
+            if curl --silent --output /dev/null http://127.0.0.1:8000/; then
+              exit 0
+            fi
+            sleep 0.5
+          done
+          echo "The PHP server did not start:" >&2
+          cat php-server.log >&2
+          exit 1
+
+      - name: Run integration tests
+        run: npm run test:integration
+
+      - name: Show PHP server log
+        if: failure()
+        run: cat php-server.log 2>/dev/null || echo "No PHP server log was written."
