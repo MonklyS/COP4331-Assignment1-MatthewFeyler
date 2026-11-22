@@ -10,7 +10,8 @@
     "lint:css": "stylelint \"public/**/*.css\"",
     "lint:js": "eslint public tests",
     "test": "jest",
-    "test:unit": "jest tests/unit"
+    "test:unit": "jest tests/unit",
+    "test:integration": "jest tests/integration"
   },
   "jest": {
     "testEnvironment": "node",
