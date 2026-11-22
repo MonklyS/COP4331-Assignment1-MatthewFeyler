@@ -26,7 +26,7 @@ Browser (HTML/CSS/JS)  --JSON over HTTP-->  Apache + PHP (api/)  --SQL-->  MySQL
 ```
 .
 ├── .github/workflows/
-│   └── lint.yml            CI: lints HTML, CSS, and JS on every push and pull request
+│   └── ci.yml              CI: lints HTML, CSS, and JS and runs the tests on every push and pull request
 ├── api/                    PHP endpoints, deployed as LAMPAPI/
 │   ├── Login.php           POST {login, password}      -> {id, firstName, lastName, error}
 │   ├── AddColor.php        POST {color, userId}        -> {error}
@@ -42,11 +42,18 @@ Browser (HTML/CSS/JS)  --JSON over HTTP-->  Apache + PHP (api/)  --SQL-->  MySQL
 │   └── js/
 │       ├── code.js         Login, session cookie, add and search logic
 │       └── md5.js          MD5 library (blueimp, MIT), for optional password hashing
+├── tests/
+│   ├── unit/
+│   │   └── code.test.js    Jest unit tests for the helper functions in code.js
+│   ├── integration/
+│   │   └── api.test.js     Jest tests that call the PHP endpoints over HTTP
+│   └── fixtures/
+│       └── seed.sql        Test users loaded into the CI database
 ├── .gitignore
 ├── .htmlhintrc             HTMLHint rules
 ├── eslint.config.mjs       ESLint rules
 ├── stylelint.config.mjs    Stylelint rules
-├── package.json            Lint tools only; the app itself has no Node dependencies
+├── package.json            Lint and test tools only; the app itself has no Node dependencies
 ├── package-lock.json
 ├── LICENSE.md
 └── README.md
@@ -118,24 +125,70 @@ curl -X POST http://<server>/LAMPAPI/Login.php \
      -d '{"login":"testuser","password":"testpass"}'
 ```
 
-## Linting and CI
+## Linting, testing, and CI
 
-GitHub Actions runs [`lint.yml`](.github/workflows/lint.yml) on every push and pull request. Each linter is its own job, so one run reports problems in all three languages.
+GitHub Actions runs [`ci.yml`](.github/workflows/ci.yml) on every push and pull request. Every check is its own job, so one run reports all problems at once:
+
+| Job | What it does |
+|-----|--------------|
+| Lint html, Lint css, Lint js | Runs HTMLHint, Stylelint, and ESLint (see [Linting](#linting)) |
+| Unit tests | Runs the Jest tests for the helper functions in `code.js` |
+| Integration tests | Starts the PHP API on a MySQL database and runs the Jest tests that call it over HTTP |
+
+Node.js is only used to run the lint and test tools. The app itself still runs on PHP and MySQL, in CI as well as on the server.
+
+### Linting
 
 | Files | Linter | Rules |
 |-------|--------|-------|
 | `public/**/*.html` | HTMLHint | `.htmlhintrc` |
 | `public/**/*.css` | Stylelint | `stylelint.config.mjs` (extends `stylelint-config-standard`) |
-| `public/**/*.js` | ESLint | `eslint.config.mjs` (`recommended`, plus `eqeqeq` and `no-var`) |
+| `public/**/*.js`, `tests/**/*.js` | ESLint | `eslint.config.mjs` (`recommended`, plus `eqeqeq` and `no-var`) |
 
 `public/js/md5.js` is a third-party library, so ESLint skips it. Script inside `<script>` tags in the HTML pages is not linted.
 
-To run the same checks locally with Node.js 24 or newer:
+### Tests
+
+The tests use [Jest](https://jestjs.io/).
+
+**Unit tests** (`tests/unit/code.test.js`) cover two functions in `code.js` that need no browser, server, or database:
+
+- `formatColorList` builds the list shown under the search box from the color names the API returns.
+- `parseUserCookie` reads the user's name and id back out of the session cookie. `readCookie` uses it to decide whether to send the user to the login page.
+
+`code.js` exports these two functions only when Node.js loads it (the `module.exports` block at the end of the file). Browsers skip that block, so the pages load the file as before.
+
+**Integration tests** (`tests/integration/api.test.js`) send JSON requests to `Login.php`, `AddColor.php`, and `SearchColors.php`. For each response they check the HTTP status, the `Content-Type` header, and the exact JSON structure. They also check that:
+
+- a wrong password or unknown user gets `id` 0 and an error,
+- a color that was added can be found by searching for it,
+- search matches part of a name regardless of letter case,
+- a search with no matches returns an error and no `results` array, which is what `code.js` expects,
+- one user's search never returns another user's colors.
+
+In CI, the integration test job:
+
+1. starts MySQL 8.4 as a service container,
+2. loads `database/schema.sql` and `tests/fixtures/seed.sql`, which adds the users `testuser` and `otheruser`,
+3. writes an `api/config.php` that points at that database,
+4. serves `api/` with PHP 8.3's built-in web server (`php -S 127.0.0.1:8000 -t api`),
+5. runs the integration tests against it.
+
+If an endpoint returns something that is not JSON, such as a PHP error, the failing test prints the raw response, and the job prints the PHP server log.
+
+### Running the checks locally
+
+With Node.js 24 or newer:
 
 ```bash
 npm ci
-npm run lint        # or lint:html, lint:css, lint:js
+npm run lint                # or lint:html, lint:css, lint:js
+npm run test:unit           # needs no server
+npm run test:integration    # needs the API running (see below)
+npm test                    # unit and integration tests
 ```
+
+The integration tests need the API running against a database that has `tests/fixtures/seed.sql` loaded. Set `API_BASE_URL` to the folder that serves the endpoints, for example `API_BASE_URL=http://localhost/LAMPAPI npm run test:integration`. It defaults to `http://127.0.0.1:8000`, the address CI uses. The tests add colors every time they run, so point them at a test database, never the live site.
 
 ## Assumptions and limitations
 
@@ -159,6 +212,7 @@ The code in this repository is the version that ran on my DigitalOcean droplet, 
 - `database/schema.sql` was added so the tables can be recreated without attending the lab.
 - An unused background image and an editor swap file were left out.
 - Lint errors were fixed when CI was added. Both pages gained `<!DOCTYPE html>`, `lang`, and a charset, which moves them from quirks mode to standards mode, so the login and color panels are slightly taller and **Log Out** sits a little lower. `code.js` now uses `===` and `let`, and `styles.css` follows the Stylelint standard rules.
+- When tests were added, the loop in `searchColor` that formats the results was moved into `formatColorList()`, and the cookie parsing in `readCookie` was moved into `parseUserCookie()`, so both can be unit tested. The pages behave the same.
 
 ## AI assistance disclosure
 
@@ -173,6 +227,13 @@ A second session added the CI workflow:
 - **Date**: November 8, 2026
 - **Scope**: Adding automated linting with GitHub Actions.
 - **Use**: The assistant wrote the workflow and linter configuration, fixed the reported lint errors in the pages, `styles.css`, and `code.js`, and drafted the README changes for this work.
+
+A third session added automated tests:
+
+- **Tool**: Claude Opus 5.5 (Anthropic), used through Claude Code in VS Code
+- **Date**: November 22, 2026
+- **Scope**: Adding unit and integration tests to the CI workflow.
+- **Use**: The assistant moved the result formatting and cookie parsing in `code.js` into testable functions, wrote the Jest unit and integration tests and the test seed data, added the test jobs to the workflow, and drafted the README changes for this work.
 
 All AI-assisted changes were reviewed before submission.
 
