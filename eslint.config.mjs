@@ -19,4 +19,16 @@ export default [
 			"no-var": "error",
 		},
 	},
+	{
+		files: ["tests/**/*.js"],
+		languageOptions: {
+			// Jest test files run in Node and use require().
+			sourceType: "commonjs",
+			globals: { ...globals.node, ...globals.jest },
+		},
+		rules: {
+			eqeqeq: "error",
+			"no-var": "error",
+		},
+	},
 ];
