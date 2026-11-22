@@ -1,5 +1,7 @@
 // Called from onclick handlers and the inline script in the HTML pages, which ESLint can't see.
 /* exported doLogin, readCookie, doLogout, addColor, searchColor */
+// `module` only exists when the Jest unit tests load this file (see the end of the file).
+/* global module */
 
 const urlBase = 'LAMPAPI';	// relative to the page, so no server hostname is hardcoded
 const extension = 'php';
@@ -69,29 +71,39 @@ function saveCookie()
 	document.cookie = "firstName=" + firstName + ",lastName=" + lastName + ",userId=" + userId + ";expires=" + date.toGMTString();
 }
 
-function readCookie()
+// Splits the session cookie written by saveCookie() ("firstName=...,lastName=...,userId=...")
+// into its fields. userId is -1 when the cookie has no id, which means nobody is logged in.
+function parseUserCookie( cookie )
 {
-	userId = -1;
-	let data = document.cookie;
-	let splits = data.split(",");
-	for(let i = 0; i < splits.length; i++) 
+	let user = {firstName:"", lastName:"", userId:-1};
+	let splits = cookie.split(",");
+	for(let i = 0; i < splits.length; i++)
 	{
 		let thisOne = splits[i].trim();
 		let tokens = thisOne.split("=");
 		if( tokens[0] === "firstName" )
 		{
-			firstName = tokens[1];
+			user.firstName = tokens[1];
 		}
 		else if( tokens[0] === "lastName" )
 		{
-			lastName = tokens[1];
+			user.lastName = tokens[1];
 		}
 		else if( tokens[0] === "userId" )
 		{
-			userId = parseInt( tokens[1].trim() );
+			user.userId = parseInt( tokens[1].trim() );
 		}
 	}
-	
+	return user;
+}
+
+function readCookie()
+{
+	let user = parseUserCookie( document.cookie );
+	userId = user.userId;
+	firstName = user.firstName;
+	lastName = user.lastName;
+
 	if( userId < 0 )
 	{
 		window.location.href = "index.html";
@@ -142,12 +154,26 @@ function addColor()
 	
 }
 
+// Joins the color names returned by SearchColors into the HTML shown under the search box,
+// one color per line.
+function formatColorList( colors )
+{
+	let colorList = "";
+	for( let i=0; i<colors.length; i++ )
+	{
+		colorList += colors[i];
+		if( i < colors.length - 1 )
+		{
+			colorList += "<br />\r\n";
+		}
+	}
+	return colorList;
+}
+
 function searchColor()
 {
 	let srch = document.getElementById("searchText").value;
 	document.getElementById("colorSearchResult").innerHTML = "";
-	
-	let colorList = "";
 
 	let tmp = {search:srch,userId:userId};
 	let jsonPayload = JSON.stringify( tmp );
@@ -174,17 +200,7 @@ function searchColor()
 				}
 				
 				document.getElementById("colorSearchResult").innerHTML = "Color(s) has been retrieved";
-				
-				for( let i=0; i<jsonObject.results.length; i++ )
-				{
-					colorList += jsonObject.results[i];
-					if( i < jsonObject.results.length - 1 )
-					{
-						colorList += "<br />\r\n";
-					}
-				}
-				
-				document.getElementsByTagName("p")[0].innerHTML = colorList;
+				document.getElementsByTagName("p")[0].innerHTML = formatColorList( jsonObject.results );
 			}
 		};
 		xhr.send(jsonPayload);
@@ -194,4 +210,10 @@ function searchColor()
 		document.getElementById("colorSearchResult").innerHTML = err.message;
 	}
 	
+}
+
+// Lets the Jest unit tests require() this file. Browsers have no `module`, so they skip this.
+if( typeof module !== "undefined" )
+{
+	module.exports = { formatColorList, parseUserCookie };
 }
